@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fuel Depot Map</title>
+  <!-- For offline use: download leaflet.css, leaflet.js, xlsx.full.min.js and replace CDN links -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <style>
+    :root {
+      --bg:#0f1117; --surface:#1a1d27; --surface2:#252836; --border:#2d3148;
+      --text:#e2e8f0; --muted:#94a3b8; --accent:#3b82f6;
+      --red:#ef4444; --amber:#f59e0b; --green:#22c55e; --grey:#6b7280;
+    }
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;}
+    .screen{display:none;}
+    /* SCREEN 1 */
+    #screen-upload{flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:28px;padding:24px;}
+    .app-header{text-align:center;}
+    .app-header h1{font-size:2rem;font-weight:700;letter-spacing:-.5px;}
+    .app-header p{color:var(--muted);margin-top:6px;font-size:.95rem;}
+    .upload-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;width:100%;max-width:620px;}
+    .upload-card{background:var(--surface);border:2px dashed var(--border);border-radius:12px;padding:30px 20px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;user-select:none;}
+    .upload-card:hover,.upload-card.drag-over{border-color:var(--accent);background:#1e2540;}
+    .upload-card.has-file{border-color:var(--green);border-style:solid;}
+    .upload-card .up-icon{font-size:2.2rem;display:block;margin-bottom:10px;}
+    .upload-card .up-label{font-size:.78rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;}
+    .upload-card .up-title{font-size:1rem;font-weight:600;margin-bottom:6px;}
+    .upload-card .up-hint{font-size:.78rem;color:var(--muted);}
+    .upload-card .up-fname{font-size:.8rem;color:var(--green);margin-top:10px;word-break:break-all;display:none;}
+    .upload-card.has-file .up-fname{display:block;}
+    .upload-card input[type="file"]{display:none;}
+    .btn-primary{background:var(--accent);color:#fff;border:none;padding:12px 32px;border-radius:8px;font-size:1rem;font-weight:600;cursor:pointer;transition:opacity .2s,transform .1s;}
+    .btn-primary:disabled{opacity:.35;cursor:not-allowed;}
+    .btn-primary:not(:disabled):hover{opacity:.88;}
+    .btn-primary:not(:disabled):active{transform:scale(.98);}
+    .btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border);padding:10px 22px;border-radius:8px;font-size:.88rem;font-weight:500;cursor:pointer;transition:background .2s;}
+    .btn-secondary:hover{background:#2d3148;}
+    /* SCREEN 2 */
+    #screen-mapping{flex-direction:column;height:100vh;overflow-y:auto;padding:32px 24px;align-items:center;}
+    .mapping-container{width:100%;max-width:860px;}
+    .mapping-container h2{font-size:1.4rem;font-weight:700;margin-bottom:22px;}
+    .mapping-section{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:22px;margin-bottom:18px;}
+    .mapping-section h3{font-size:.82rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:14px;}
+    .preview-wrap{overflow-x:auto;margin-bottom:18px;border-radius:6px;}
+    .preview-table{width:100%;border-collapse:collapse;font-size:.76rem;}
+    .preview-table th{background:var(--surface2);color:var(--muted);padding:6px 10px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--border);}
+    .preview-table td{padding:5px 10px;border-bottom:1px solid var(--border);white-space:nowrap;color:var(--muted);}
+    .preview-table tr:last-child td{border-bottom:none;}
+    .mapping-rows{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+    .mapping-row label{display:block;font-size:.78rem;font-weight:600;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.05em;}
+    .mapping-row select{width:100%;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:.86rem;}
+    .mapping-row select:focus{outline:none;border-color:var(--accent);}
+    .mapping-footer{display:flex;align-items:center;gap:14px;margin-top:6px;}
+    .lookback-row{display:flex;align-items:center;gap:8px;font-size:.86rem;color:var(--muted);}
+    .lookback-row input{width:68px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:.86rem;text-align:center;}
+    .mapping-footer .spacer{flex:1;}
+    /* SCREEN 3 */
+    #screen-map{flex-direction:row;height:100vh;}
+    #side-panel{width:320px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;height:100vh;}
+    .panel-header{padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0;}
+    .panel-header h2{font-size:1rem;font-weight:700;margin-bottom:8px;}
+    .panel-meta{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
+    .meta-badge{font-size:.68rem;font-weight:600;padding:2px 8px;border-radius:100px;text-transform:uppercase;letter-spacing:.05em;}
+    .meta-badge.red{background:#3f1212;color:var(--red);}
+    .meta-badge.amber{background:#3f2a12;color:var(--amber);}
+    .meta-badge.green{background:#122b12;color:var(--green);}
+    .meta-badge.grey{background:var(--surface2);color:var(--grey);}
+    #btn-reupload{width:100%;font-size:.8rem;padding:7px 12px;}
+    .panel-list{flex:1;overflow-y:auto;padding:10px;}
+    .depot-card{background:var(--surface2);border:1px solid var(--border);border-left:3px solid var(--grey);border-radius:8px;padding:12px;margin-bottom:8px;cursor:pointer;transition:background .15s;}
+    .depot-card:hover{background:#2d3148;}
+    .depot-card[data-urgency="red"]{border-left-color:var(--red);}
+    .depot-card[data-urgency="amber"]{border-left-color:var(--amber);}
+    .depot-card[data-urgency="green"]{border-left-color:var(--green);}
+    .depot-card .dc-name{font-weight:600;font-size:.9rem;margin-bottom:2px;}
+    .depot-card .dc-code{font-size:.72rem;color:var(--muted);margin-bottom:8px;}
+    .depot-card .dc-stats{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;}
+    .depot-card .dc-stat{font-size:.73rem;color:var(--muted);}
+    .depot-card .dc-stat strong{color:var(--text);display:block;font-size:.86rem;}
+    .depot-card .dc-days{font-size:.82rem;font-weight:700;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);}
+    .depot-card[data-urgency="red"] .dc-days{color:var(--red);}
+    .depot-card[data-urgency="amber"] .dc-days{color:var(--amber);}
+    .depot-card[data-urgency="green"] .dc-days{color:var(--green);}
+    .depot-card[data-urgency="grey"] .dc-days{color:var(--grey);}
+    .no-map-badge{font-size:.65rem;background:var(--surface);color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:1px 5px;margin-left:6px;vertical-align:middle;}
+    #map{flex:1;height:100vh;}
+    /* Leaflet dark popup */
+    .leaflet-popup-content-wrapper{background:#1a1d27;color:#e2e8f0;border:1px solid #2d3148;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.6);}
+    .leaflet-popup-tip{background:#1a1d27;}
+    .leaflet-popup-content{margin:14px 16px;min-width:210px;}
+    .pu-title{font-weight:700;font-size:.98rem;margin-bottom:2px;}
+    .pu-code{font-size:.72rem;color:#94a3b8;margin-bottom:10px;}
+    .pu-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;margin-bottom:10px;}
+    .pu-stat label{font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;display:block;}
+    .pu-stat span{font-size:.9rem;font-weight:600;}
+    .pu-days{padding-top:8px;border-top:1px solid #2d3148;font-size:.82rem;}
+    .pu-days strong{font-size:1.05rem;}
+    .pu-pattern{margin-top:5px;font-size:.73rem;color:#94a3b8;}
+    /* Toast */
+    #toast{position:fixed;bottom:22px;right:22px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 16px;font-size:.86rem;max-width:320px;z-index:9999;display:none;box-shadow:0 4px 20px rgba(0,0,0,.4);}
+    #toast.warn{border-left:3px solid var(--amber);color:var(--amber);}
+    #toast.error{border-left:3px solid var(--red);color:var(--red);}
+    #toast.info{border-left:3px solid var(--accent);}
+  </style>
+</head>
+<body>
+
+  <!-- SCREEN 1: UPLOAD -->
+  <div id="screen-upload" class="screen">
+    <div class="app-header">
+      <h1>Fuel Depot Map</h1>
+      <p>Upload HxGN EAM exports to visualise fuel levels and estimated runout times</p>
+    </div>
+    <div class="upload-grid">
+      <div class="upload-card" id="card-stock">
+        <span class="up-icon">&#128230;</span>
+        <div class="up-label">File 1</div>
+        <div class="up-title">Stock / Inventory</div>
+        <div class="up-hint">Drag &amp; drop or click<br>.xlsx / .xls</div>
+        <div class="up-fname" id="fname-stock"></div>
+        <input type="file" id="input-stock" accept=".xlsx,.xls,.ods">
+      </div>
+      <div class="upload-card" id="card-txn">
+        <span class="up-icon">&#128203;</span>
+        <div class="up-label">File 2</div>
+        <div class="up-title">Transactions</div>
+        <div class="up-hint">Drag &amp; drop or click<br>.xlsx / .xls</div>
+        <div class="up-fname" id="fname-txn"></div>
+        <input type="file" id="input-txn" accept=".xlsx,.xls,.ods">
+      </div>
+    </div>
+    <button class="btn-primary" id="btn-process" disabled>Process Files &#8594;</button>
+  </div>
+
+  <!-- SCREEN 2: COLUMN MAPPING -->
+  <div id="screen-mapping" class="screen">
+    <div class="mapping-container">
+      <h2>Map Columns</h2>
+      <div class="mapping-section">
+        <h3>Stock / Inventory File</h3>
+        <div class="preview-wrap"><table class="preview-table" id="preview-stock"><thead><tr></tr></thead><tbody></tbody></table></div>
+        <div class="mapping-rows">
+          <div class="mapping-row">
+            <label>Depot / Store Code</label>
+            <select id="map-stock-depot"><option value="">-- Select column --</option></select>
+          </div>
+          <div class="mapping-row">
+            <label>Current Holding (Litres)</label>
+            <select id="map-stock-holding"><option value="">-- Select column --</option></select>
+          </div>
+        </div>
+      </div>
+      <div class="mapping-section">
+        <h3>Transactions File</h3>
+        <div class="preview-wrap"><table class="preview-table" id="preview-txn"><thead><tr></tr></thead><tbody></tbody></table></div>
+        <div class="mapping-rows">
+          <div class="mapping-row">
+            <label>Transaction Date</label>
+            <select id="map-txn-date"><option value="">-- Select column --</option></select>
+          </div>
+          <div class="mapping-row">
+            <label>Depot / Store Code</label>
+            <select id="map-txn-depot"><option value="">-- Select column --</option></select>
+          </div>
+          <div class="mapping-row">
+            <label>Quantity Issued</label>
+            <select id="map-txn-qty"><option value="">-- Select column --</option></select>
+          </div>
+        </div>
+      </div>
+      <div class="mapping-footer">
+        <div class="lookback-row">
+          <label for="input-lookback">Lookback:</label>
+          <input type="number" id="input-lookback" value="90" min="7" max="365">
+          <span>days</span>
+        </div>
+        <div class="spacer"></div>
+        <button class="btn-secondary" id="btn-back-upload">&#8592; Back</button>
+        <button class="btn-primary" id="btn-generate">Generate Map &#8594;</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCREEN 3: MAP VIEW -->
+  <div id="screen-map" class="screen">
+    <div id="side-panel">
+      <div class="panel-header">
+        <h2>Fuel Depots</h2>
+        <div class="panel-meta" id="panel-meta"></div>
+        <button class="btn-secondary" id="btn-reupload">&#8592; Re-upload Files</button>
+      </div>
+      <div class="panel-list" id="depot-list"></div>
+    </div>
+    <div id="map"></div>
+  </div>
+
+  <div id="toast"></div>
+
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV/XN2GqT8=" crossorigin=""></script>
+  <script>
+  /* ================================================================
+     === EDIT DEPOT LOCATIONS HERE ===
+     Add one entry per depot code from your HxGN data.
+     Code must match EXACTLY (case-sensitive) the depot/store code
+     that appears in your Excel exports.
+
+     Format:
+       "DEPOT_CODE": { name: "Display Name", lat: -XX.XXXX, lng: XXX.XXXX }
+
+     Find coordinates: https://www.latlong.net/
+     or Google Maps → right-click a location → "What's here?"
+  ================================================================ */
+  const DEPOT_LOCATIONS = {
+    "EXAMPLE_A": { name: "Example Depot Alpha",   lat: -33.8688, lng: 151.2093 },
+    "EXAMPLE_B": { name: "Example Depot Bravo",   lat: -27.4698, lng: 153.0251 },
+    "EXAMPLE_C": { name: "Example Depot Charlie", lat: -37.8136, lng: 144.9631 },
+    // Add your real depot entries here...
+  };
+  /* ================================================================
+     === END DEPOT LOCATIONS ===
+  ================================================================ */
+
+  // --- Constants ---
+  const URGENCY_RED   = 7;   // days — change thresholds here if needed
+  const URGENCY_AMBER = 14;
+
+  // --- App State ---
+  let S = {
+    stockFile: null, txnFile: null,
+    stockHeaders: [], stockRows: [],
+    txnHeaders:   [], txnRows:   [],
+    mapInstance: null, markers: [],
+    lookbackDays: 90,
+  };
+
+  // ---------------------------------------------------------------
+  // UTILITIES
+  // ---------------------------------------------------------------
+  function parseExcelDate(val) {
+    if (val === null || val === undefined || val === '') return null;
+    if (typeof val === 'number') {
+      // Excel serial → JS Date (UTC)
+      const ms = Math.round((val - 25569) * 86400 * 1000);
+      const d = new Date(ms);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    const s = String(val).trim();
+    if (!s) return null;
+    let d = new Date(s);
+    if (!isNaN(d.getTime())) return d;
+    // DD/MM/YYYY or DD-MM-YYYY
+    const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+    if (m) {
+      let y = parseInt(m[3], 10);
+      if (y < 100) y += 2000;
+      d = new Date(Date.UTC(y, parseInt(m[2], 10) - 1, parseInt(m[1], 10)));
+      if (!isNaN(d.getTime())) return d;
+    }
+    return null;
+  }
+
+  function toDateKey(d) { return d.toISOString().slice(0, 10); }
+
+  function isWeekend(d) { const day = d.getUTCDay(); return day === 0 || day === 6; }
+
+  function fmtNum(n, dec) {
+    dec = dec === undefined ? 0 : dec;
+    if (n === null || n === undefined || isNaN(n) || !isFinite(n)) return '\u2014';
+    return n.toLocaleString('en-AU', { maximumFractionDigits: dec, minimumFractionDigits: dec });
+  }
+
+  function urgency(days) {
+    if (days === null || days === undefined || isNaN(days) || !isFinite(days)) return 'grey';
+    if (days < URGENCY_RED)   return 'red';
+    if (days < URGENCY_AMBER) return 'amber';
+    return 'green';
+  }
+
+  let _toastTimer = null;
+  function toast(msg, type) {
+    type = type || 'info';
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = type;
+    el.style.display = 'block';
+    clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(function() { el.style.display = 'none'; }, 5000);
+  }
+
+  function showScreen(id) {
+    document.querySelectorAll('.screen').forEach(function(s) { s.style.display = 'none'; });
+    const t = document.getElementById(id);
+    t.style.display = 'flex';
+    if (id === 'screen-map' && S.mapInstance) {
+      setTimeout(function() { S.mapInstance.invalidateSize(); }, 0);
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // EXCEL PARSING
+  // ---------------------------------------------------------------
+  function readWorkbook(file) {
+    return new Promise(function(resolve, reject) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          resolve(XLSX.read(e.target.result, { type: 'array', cellDates: false }));
+        } catch(err) { reject(err); }
+      };
+      reader.onerror = function() { reject(new Error('Failed to read file')); };
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  function extractSheet(wb) {
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+    if (!raw.length) return { headers: [], rows: [] };
+    return { headers: raw[0].map(function(h){ return String(h).trim(); }), rows: raw.slice(1) };
+  }
+
+  function autoDetect(headers, kws) {
+    const lc = headers.map(function(h){ return h.toLowerCase(); });
+    for (let k = 0; k < kws.length; k++) {
+      const idx = lc.findIndex(function(h){ return h.includes(kws[k]); });
+      if (idx !== -1) return idx;
+    }
+    return -1;
+  }
+
+  function fillDropdown(id, headers, autoIdx) {
+    const sel = document.getElementById(id);
+    while (sel.options.length > 1) sel.remove(1);
+    headers.forEach(function(h, i) {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = i + ': ' + h;
+      sel.appendChild(opt);
+    });
+    if (autoIdx >= 0) sel.value = autoIdx;
+  }
+
+  function renderPreview(tableId, headers, rows) {
+    const tbl = document.getElementById(tableId);
+    const thead = tbl.querySelector('thead tr');
+    const tbody = tbl.querySelector('tbody');
+    thead.innerHTML = '';
+    tbody.innerHTML = '';
+    headers.forEach(function(h, i) {
+      const th = document.createElement('th');
+      th.textContent = i + ': ' + h;
+      thead.appendChild(th);
+    });
+    rows.slice(0, 3).forEach(function(row) {
+      const tr = document.createElement('tr');
+      headers.forEach(function(_, i) {
+        const td = document.createElement('td');
+        td.textContent = String(row[i] !== undefined ? row[i] : '');
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+  }
+
+  // ---------------------------------------------------------------
+  // CALCULATION ENGINE
+  // ---------------------------------------------------------------
+  function buildStockMap(rows, depotIdx, holdingIdx) {
+    const map = new Map();
+    rows.forEach(function(row) {
+      const code = String(row[depotIdx] || '').trim();
+      if (!code) return;
+      const qty = parseFloat(String(row[holdingIdx]).replace(/[^0-9.\-]/g, ''));
+      if (!isNaN(qty)) map.set(code, (map.get(code) || 0) + qty);
+    });
+    return map;
+  }
+
+  function buildTxnMap(rows, dateIdx, depotIdx, qtyIdx, lookback) {
+    const cutoff = new Date(Date.now() - lookback * 864e5);
+    const result = new Map();
+    rows.forEach(function(row) {
+      const d = parseExcelDate(row[dateIdx]);
+      if (!d || d < cutoff) return;
+      const code = String(row[depotIdx] || '').trim();
+      if (!code) return;
+      const qty = parseFloat(String(row[qtyIdx]).replace(/[^0-9.\-]/g, ''));
+      if (isNaN(qty) || qty <= 0) return;
+      if (!result.has(code)) result.set(code, {
+        totalQty:0, allDates:new Set(),
+        wdQty:0, wdDates:new Set(),
+        weQty:0, weDates:new Set()
+      });
+      const rec = result.get(code);
+      const key = toDateKey(d);
+      rec.totalQty += qty;
+      rec.allDates.add(key);
+      if (isWeekend(d)) { rec.weQty += qty; rec.weDates.add(key); }
+      else              { rec.wdQty += qty; rec.wdDates.add(key); }
+    });
+    return result;
+  }
+
+  function computeStats(stockMap, txnMap) {
+    const stats = [];
+    const order = { red:0, amber:1, green:2, grey:3 };
+    stockMap.forEach(function(holding, code) {
+      const txn = txnMap.get(code) || null;
+      let avgDaily=null, wdAvg=null, weAvg=null, daysLeft=null;
+      if (txn && txn.allDates.size > 0) {
+        avgDaily = txn.totalQty / txn.allDates.size;
+        wdAvg    = txn.wdDates.size > 0 ? txn.wdQty / txn.wdDates.size : null;
+        weAvg    = txn.weDates.size > 0 ? txn.weQty / txn.weDates.size : null;
+        daysLeft = avgDaily > 0 ? holding / avgDaily : null;
+      }
+      stats.push({
+        code, holding, avgDaily, wdAvg, weAvg, daysLeft,
+        urgency: urgency(daysLeft),
+        location: DEPOT_LOCATIONS[code] || null,
+        activeDays: txn ? txn.allDates.size : 0
+      });
+    });
+    stats.sort(function(a, b) {
+      const uo = order[a.urgency] - order[b.urgency];
+      if (uo !== 0) return uo;
+      if (a.daysLeft === null && b.daysLeft === null) return 0;
+      if (a.daysLeft === null) return 1;
+      if (b.daysLeft === null) return -1;
+      return a.daysLeft - b.daysLeft;
+    });
+    return stats;
+  }
+
+  // ---------------------------------------------------------------
+  // MAP RENDERING
+  // ---------------------------------------------------------------
+  const UC = { red:'#ef4444', amber:'#f59e0b', green:'#22c55e', grey:'#6b7280' };
+
+  function makeIcon(urg) {
+    const c = UC[urg] || UC.grey;
+    return L.divIcon({
+      className: '',
+      html: '<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">'
+          + '<circle cx="14" cy="14" r="11" fill="' + c + '" stroke="#fff" stroke-width="2.5"'
+          + ' filter="drop-shadow(0 2px 6px rgba(0,0,0,.7))"/></svg>',
+      iconSize: [28,28], iconAnchor: [14,14], popupAnchor: [0,-16]
+    });
+  }
+
+  function popupHTML(s) {
+    const name   = s.location ? s.location.name : s.code;
+    const days   = s.daysLeft !== null ? fmtNum(s.daysLeft,1) + ' days' : 'Unknown';
+    const avg    = s.avgDaily !== null ? fmtNum(s.avgDaily,1) + ' L/day' : 'No data';
+    const wd     = s.wdAvg   !== null ? fmtNum(s.wdAvg,1)   + ' L/day' : '\u2014';
+    const we     = s.weAvg   !== null ? fmtNum(s.weAvg,1)   + ' L/day' : '\u2014';
+    const dcol   = UC[s.urgency];
+    return '<div class="pu-title">' + name + '</div>'
+         + '<div class="pu-code">' + s.code + '</div>'
+         + '<div class="pu-grid">'
+         + '<div class="pu-stat"><label>Current Holding</label><span>' + fmtNum(s.holding) + ' L</span></div>'
+         + '<div class="pu-stat"><label>Avg Usage</label><span>' + avg + '</span></div>'
+         + '</div>'
+         + '<div class="pu-days">Est. days to empty: <strong style="color:' + dcol + '">' + days + '</strong></div>'
+         + '<div class="pu-pattern">Weekdays: ' + wd + '&nbsp;&nbsp;|&nbsp;&nbsp;Weekends: ' + we + '</div>'
+         + '<div class="pu-pattern" style="margin-top:3px">Active days (last ' + S.lookbackDays + 'd): ' + s.activeDays + '</div>';
+  }
+
+  function initMap() {
+    if (S.mapInstance) return;
+    S.mapInstance = L.map('map', { preferCanvas: true });
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      subdomains: 'abcd', maxZoom: 19
+    }).addTo(S.mapInstance);
+  }
+
+  function clearMarkers() {
+    S.markers.forEach(function(m){ m.remove(); });
+    S.markers = [];
+  }
+
+  function renderMap(stats) {
+    clearMarkers();
+    const bounds = [];
+    let unmapped = 0;
+    stats.forEach(function(s) {
+      if (!s.location) { unmapped++; return; }
+      const m = L.marker([s.location.lat, s.location.lng], { icon: makeIcon(s.urgency) });
+      m.bindPopup(popupHTML(s), { maxWidth: 270 });
+      m._depotCode = s.code;
+      m.addTo(S.mapInstance);
+      S.markers.push(m);
+      bounds.push([s.location.lat, s.location.lng]);
+    });
+    if (bounds.length > 0) {
+      S.mapInstance.fitBounds(L.latLngBounds(bounds), { padding: [50, 50] });
+    } else {
+      S.mapInstance.setView([-25.2744, 133.7751], 4);
+      toast('No depots matched DEPOT_LOCATIONS. Update the config at the top of the script.', 'warn');
+    }
+    if (unmapped > 0) toast(unmapped + ' depot(s) not in DEPOT_LOCATIONS \u2014 shown in panel only.', 'warn');
+  }
+
+  function renderPanel(stats) {
+    const list = document.getElementById('depot-list');
+    list.innerHTML = '';
+    const counts = { red:0, amber:0, green:0, grey:0 };
+    stats.forEach(function(s){ counts[s.urgency]++; });
+    const meta = document.getElementById('panel-meta');
+    meta.innerHTML = '';
+    [['red','Critical'],['amber','Warning'],['green','OK'],['grey','No data']].forEach(function(pair) {
+      if (!counts[pair[0]]) return;
+      const b = document.createElement('span');
+      b.className = 'meta-badge ' + pair[0];
+      b.textContent = counts[pair[0]] + ' ' + pair[1];
+      meta.appendChild(b);
+    });
+    stats.forEach(function(s) {
+      const card = document.createElement('div');
+      card.className = 'depot-card';
+      card.setAttribute('data-urgency', s.urgency);
+      const noMap = s.location ? '' : '<span class="no-map-badge">not on map</span>';
+      const days  = s.daysLeft !== null ? '~' + fmtNum(s.daysLeft,1) + ' days left' : 'No usage data';
+      const avg   = s.avgDaily !== null ? fmtNum(s.avgDaily,1) + ' L/day' : 'No data';
+      card.innerHTML = '<div class="dc-name">' + (s.location ? s.location.name : s.code) + noMap + '</div>'
+                     + '<div class="dc-code">' + s.code + '</div>'
+                     + '<div class="dc-stats">'
+                     + '<div class="dc-stat"><label>Holding</label><strong>' + fmtNum(s.holding) + ' L</strong></div>'
+                     + '<div class="dc-stat"><label>Avg Usage</label><strong>' + avg + '</strong></div>'
+                     + '</div>'
+                     + '<div class="dc-days">' + days + '</div>';
+      if (s.location) {
+        card.addEventListener('click', function() {
+          S.mapInstance.flyTo([s.location.lat, s.location.lng], 12);
+          S.markers.forEach(function(m) {
+            if (m._depotCode === s.code) setTimeout(function(){ m.openPopup(); }, 600);
+          });
+        });
+      }
+      list.appendChild(card);
+    });
+  }
+
+  // ---------------------------------------------------------------
+  // UI CONTROLLERS
+  // ---------------------------------------------------------------
+  function handleFile(file, slot) {
+    if (!file) return;
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (!['xlsx','xls','ods'].includes(ext)) { toast('Please select a .xlsx or .xls file', 'error'); return; }
+    if (slot === 'stock') {
+      S.stockFile = file;
+      document.getElementById('fname-stock').textContent = file.name;
+      document.getElementById('card-stock').classList.add('has-file');
+    } else {
+      S.txnFile = file;
+      document.getElementById('fname-txn').textContent = file.name;
+      document.getElementById('card-txn').classList.add('has-file');
+    }
+    document.getElementById('btn-process').disabled = !(S.stockFile && S.txnFile);
+  }
+
+  async function processFiles() {
+    const btn = document.getElementById('btn-process');
+    btn.disabled = true;
+    btn.textContent = 'Reading\u2026';
+    try {
+      const [swb, twb] = await Promise.all([readWorkbook(S.stockFile), readWorkbook(S.txnFile)]);
+      const sd = extractSheet(swb);
+      const td = extractSheet(twb);
+      S.stockHeaders = sd.headers; S.stockRows = sd.rows;
+      S.txnHeaders   = td.headers; S.txnRows   = td.rows;
+
+      fillDropdown('map-stock-depot',   S.stockHeaders, autoDetect(S.stockHeaders, ['depot','store','site','location','code']));
+      fillDropdown('map-stock-holding', S.stockHeaders, autoDetect(S.stockHeaders, ['holding','on hand','onhand','stock','balance','current','qty','quantity']));
+      fillDropdown('map-txn-date',      S.txnHeaders,   autoDetect(S.txnHeaders,   ['date','datetime','issued','created','transaction']));
+      fillDropdown('map-txn-depot',     S.txnHeaders,   autoDetect(S.txnHeaders,   ['depot','store','site','location','code']));
+      fillDropdown('map-txn-qty',       S.txnHeaders,   autoDetect(S.txnHeaders,   ['qty','quantity','issued','usage','amount','litres','liters','vol']));
+
+      renderPreview('preview-stock', S.stockHeaders, S.stockRows);
+      renderPreview('preview-txn',   S.txnHeaders,   S.txnRows);
+      showScreen('screen-mapping');
+    } catch(err) {
+      toast('Error reading files: ' + err.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Process Files \u2192';
+    }
+  }
+
+  function generateMap() {
+    const di  = parseInt(document.getElementById('map-stock-depot').value);
+    const hi  = parseInt(document.getElementById('map-stock-holding').value);
+    const ti  = parseInt(document.getElementById('map-txn-date').value);
+    const tdi = parseInt(document.getElementById('map-txn-depot').value);
+    const qi  = parseInt(document.getElementById('map-txn-qty').value);
+    if ([di,hi,ti,tdi,qi].some(isNaN)) { toast('Please map all required columns before generating.', 'warn'); return; }
+    S.lookbackDays = Math.max(7, parseInt(document.getElementById('input-lookback').value) || 90);
+    const stockMap = buildStockMap(S.stockRows, di, hi);
+    const txnMap   = buildTxnMap(S.txnRows, ti, tdi, qi, S.lookbackDays);
+    const stats    = computeStats(stockMap, txnMap);
+    showScreen('screen-map');
+    initMap();
+    renderMap(stats);
+    renderPanel(stats);
+  }
+
+  function resetToUpload() {
+    S.stockFile = null; S.txnFile = null;
+    ['stock','txn'].forEach(function(slot) {
+      document.getElementById('card-' + slot).classList.remove('has-file');
+      document.getElementById('fname-' + slot).textContent = '';
+      document.getElementById('input-' + slot).value = '';
+    });
+    document.getElementById('btn-process').disabled = true;
+    document.getElementById('btn-process').textContent = 'Process Files \u2192';
+    clearMarkers();
+    showScreen('screen-upload');
+  }
+
+  // ---------------------------------------------------------------
+  // EVENT WIRING
+  // ---------------------------------------------------------------
+  document.addEventListener('DOMContentLoaded', function() {
+    showScreen('screen-upload');
+
+    // File input changes
+    document.getElementById('input-stock').addEventListener('change', function(e){ handleFile(e.target.files[0], 'stock'); });
+    document.getElementById('input-txn').addEventListener('change',   function(e){ handleFile(e.target.files[0], 'txn'); });
+
+    // Card click → trigger file input
+    ['stock','txn'].forEach(function(slot) {
+      const card  = document.getElementById('card-' + slot);
+      const input = document.getElementById('input-' + slot);
+      card.addEventListener('click', function(){ input.click(); });
+      card.addEventListener('dragenter', function(e){ e.preventDefault(); card.classList.add('drag-over'); });
+      card.addEventListener('dragover',  function(e){ e.preventDefault(); });
+      card.addEventListener('dragleave', function(){ card.classList.remove('drag-over'); });
+      card.addEventListener('drop', function(e){
+        e.preventDefault();
+        card.classList.remove('drag-over');
+        handleFile(e.dataTransfer.files[0], slot);
+      });
+    });
+
+    document.getElementById('btn-process').addEventListener('click', processFiles);
+    document.getElementById('btn-generate').addEventListener('click', generateMap);
+    document.getElementById('btn-back-upload').addEventListener('click', resetToUpload);
+    document.getElementById('btn-reupload').addEventListener('click', resetToUpload);
+  });
+  </script>
+</body>
+</html>
