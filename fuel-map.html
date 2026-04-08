@@ -274,6 +274,12 @@
     return n.toLocaleString('en-AU', { maximumFractionDigits: dec, minimumFractionDigits: dec });
   }
 
+  function fmtDate(d) {
+    return d.getUTCDate().toString().padStart(2,'0') + '/'
+         + (d.getUTCMonth()+1).toString().padStart(2,'0') + '/'
+         + d.getUTCFullYear();
+  }
+
   function urgency(days) {
     if (days === null || days === undefined || isNaN(days) || !isFinite(days)) return 'grey';
     if (days < URGENCY_RED)   return 'red';
@@ -360,7 +366,16 @@
       const tr = document.createElement('tr');
       headers.forEach(function(_, i) {
         const td = document.createElement('td');
-        td.textContent = String(row[i] !== undefined ? row[i] : '');
+        const raw = row[i] !== undefined ? row[i] : '';
+        const headerLC = headers[i].toLowerCase();
+        const isDateCol = ['date','time','posted','issued','created','datetime']
+                            .some(function(k){ return headerLC.includes(k); });
+        let display = String(raw);
+        if (isDateCol && typeof raw === 'number') {
+          const d = parseExcelDate(raw);
+          if (d) display = fmtDate(d);
+        }
+        td.textContent = display;
         tr.appendChild(td);
       });
       tbody.appendChild(tr);
