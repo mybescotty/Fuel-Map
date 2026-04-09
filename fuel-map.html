@@ -220,7 +220,7 @@
      or Google Maps → right-click a location → "What's here?"
   ================================================================ */
   const DEPOT_LOCATIONS = {
-    "1121": { name: "Adderley Green Depot",     lat: 53.0090, lng: -2.1280 },
+    "1211": { name: "Adderley Green Depot",     lat: 53.0090, lng: -2.1280 },
     "2201": { name: "Bradford Depot",            lat: 53.7850, lng: -1.7450 },
     "2211": { name: "Halifax Depot",             lat: 53.7226, lng: -1.8610 },
     "2231": { name: "Huddersfield Depot",        lat: 53.6680, lng: -1.8005 },
@@ -229,6 +229,8 @@
     "2411": { name: "Doncaster Depot",           lat: 53.5340, lng: -1.1070 },
     "2431": { name: "Olive Grove Depot",         lat: 53.3745, lng: -1.4615 },
     "3011": { name: "Aberdeen Depot",            lat: 57.1620, lng: -2.0995 },
+    "3221": { name: "Larbert Depot",             lat: 56.0175, lng: -3.8320 },
+    "3281": { name: "Livingston Depot",          lat: 55.8880, lng: -3.5230 },
     "3611": { name: "Dumbarton Depot",           lat: 55.9445, lng: -4.5605 },
     "3621": { name: "Blantyre Depot",            lat: 55.7970, lng: -4.0750 },
     "3651": { name: "Scotstoun Depot",           lat: 55.8715, lng: -4.3600 },
@@ -371,6 +373,12 @@
 
   function autoDetect(headers, kws) {
     const lc = headers.map(function(h){ return h.toLowerCase(); });
+    // Pass 1: exact match (e.g. "Store" == "store", not "DepotDesc")
+    for (let k = 0; k < kws.length; k++) {
+      const idx = lc.findIndex(function(h){ return h === kws[k]; });
+      if (idx !== -1) return idx;
+    }
+    // Pass 2: partial includes match
     for (let k = 0; k < kws.length; k++) {
       const idx = lc.findIndex(function(h){ return h.includes(kws[k]); });
       if (idx !== -1) return idx;
@@ -564,8 +572,12 @@
     const list = document.getElementById('depot-list');
     list.innerHTML = '';
     const matched = stats.filter(function(s){ return !!s.location; }).length;
+    const unmatched = stats.filter(function(s){ return !s.location; }).map(function(s){ return s.code; });
     const diagEl = document.getElementById('panel-diag');
-    if (diagEl) diagEl.textContent = 'Found ' + stats.length + ' depot(s) from stock \u2014 ' + matched + ' matched to map';
+    if (diagEl) {
+      diagEl.textContent = 'Found ' + stats.length + ' depot(s) from stock \u2014 ' + matched + ' on map';
+      if (unmatched.length) diagEl.textContent += ' | Not mapped: ' + unmatched.join(', ');
+    }
     const counts = { red:0, amber:0, green:0, grey:0 };
     stats.forEach(function(s){ counts[s.urgency]++; });
     const meta = document.getElementById('panel-meta');
@@ -633,10 +645,10 @@
       S.stockHeaders = sd.headers; S.stockRows = sd.rows;
       S.txnHeaders   = td.headers; S.txnRows   = td.rows;
 
-      fillDropdown('map-stock-depot',   S.stockHeaders, autoDetect(S.stockHeaders, ['depot','store','site','location','code','bin']));
-      fillDropdown('map-stock-holding', S.stockHeaders, autoDetect(S.stockHeaders, ['holding','on hand','onhand','qoh','available','stock','balance','current','qty','quantity']));
+      fillDropdown('map-stock-depot',   S.stockHeaders, autoDetect(S.stockHeaders, ['store','site','location','bin','code','depot']));
+      fillDropdown('map-stock-holding', S.stockHeaders, autoDetect(S.stockHeaders, ['qty','qoh','holding','on hand','onhand','available','stock','balance','current','quantity']));
       fillDropdown('map-txn-date',      S.txnHeaders,   autoDetect(S.txnHeaders,   ['date','datetime','issued','created','transaction','posted']));
-      fillDropdown('map-txn-depot',     S.txnHeaders,   autoDetect(S.txnHeaders,   ['depot','store','site','location','code','bin']));
+      fillDropdown('map-txn-depot',     S.txnHeaders,   autoDetect(S.txnHeaders,   ['store','site','location','bin','code','depot']));
       fillDropdown('map-txn-qty',       S.txnHeaders,   autoDetect(S.txnHeaders,   ['qty','quantity','issued','issue','usage','amount','litres','liters','vol','dispatch']));
 
       // Clear any previous error highlights when new files are loaded
