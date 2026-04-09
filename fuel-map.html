@@ -5,8 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Fuel Depot Map</title>
   <!-- For offline use: download leaflet.css, leaflet.js, xlsx.full.min.js and replace CDN links -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"/>
   <style>
     :root {
       --bg:#0f1117; --surface:#1a1d27; --surface2:#252836; --border:#2d3148;
@@ -204,8 +203,7 @@
   <div id="toast"></div>
 
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV/XN2GqT8=" crossorigin=""></script>
+  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
   /* ================================================================
      === EDIT DEPOT LOCATIONS HERE ===
@@ -690,20 +688,17 @@
       var stockMap = buildStockMap(S.stockRows, di, hi);
       var txnMap   = buildTxnMap(S.txnRows, ti, tdi, qi, S.lookbackDays);
       var stats    = computeStats(stockMap, txnMap);
-      // Diagnostic alert — shows what was found before rendering
-      var diagMsg = 'Stock rows: ' + S.stockRows.length
-        + '\nTxn rows: ' + S.txnRows.length
-        + '\nDepots found from stock: ' + stockMap.size
-        + '\nDepot codes: ' + Array.from(stockMap.keys()).slice(0,10).join(', ')
-        + (stockMap.size > 10 ? '...' : '')
-        + '\nMatched to map: ' + stats.filter(function(s){return !!s.location;}).length;
-      alert(diagMsg);
+      // Show the map screen first so the container has real dimensions
       showScreen('screen-map');
       initMap();
-      renderMap(stats);
       renderPanel(stats);
+      // Give the browser one frame to lay out the container, then size+render
+      setTimeout(function() {
+        S.mapInstance.invalidateSize();
+        renderMap(stats);
+      }, 50);
     } catch(err) {
-      alert('ERROR in generateMap: ' + err.message + '\n' + (err.stack || ''));
+      toast('Error: ' + err.message, 'error');
     }
   }
 
