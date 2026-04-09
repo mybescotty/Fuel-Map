@@ -684,15 +684,27 @@
       return;
     }
     if (errEl) errEl.style.display = 'none';
-    const [di, hi, ti, tdi, qi] = vals.map(Number);
-    S.lookbackDays = Math.max(7, parseInt(document.getElementById('input-lookback').value) || 90);
-    const stockMap = buildStockMap(S.stockRows, di, hi);
-    const txnMap   = buildTxnMap(S.txnRows, ti, tdi, qi, S.lookbackDays);
-    const stats    = computeStats(stockMap, txnMap);
-    showScreen('screen-map');
-    initMap();
-    renderMap(stats);
-    renderPanel(stats);
+    try {
+      var di = Number(vals[0]), hi = Number(vals[1]), ti = Number(vals[2]), tdi = Number(vals[3]), qi = Number(vals[4]);
+      S.lookbackDays = Math.max(7, parseInt(document.getElementById('input-lookback').value) || 90);
+      var stockMap = buildStockMap(S.stockRows, di, hi);
+      var txnMap   = buildTxnMap(S.txnRows, ti, tdi, qi, S.lookbackDays);
+      var stats    = computeStats(stockMap, txnMap);
+      // Diagnostic alert — shows what was found before rendering
+      var diagMsg = 'Stock rows: ' + S.stockRows.length
+        + '\nTxn rows: ' + S.txnRows.length
+        + '\nDepots found from stock: ' + stockMap.size
+        + '\nDepot codes: ' + Array.from(stockMap.keys()).slice(0,10).join(', ')
+        + (stockMap.size > 10 ? '...' : '')
+        + '\nMatched to map: ' + stats.filter(function(s){return !!s.location;}).length;
+      alert(diagMsg);
+      showScreen('screen-map');
+      initMap();
+      renderMap(stats);
+      renderPanel(stats);
+    } catch(err) {
+      alert('ERROR in generateMap: ' + err.message + '\n' + (err.stack || ''));
+    }
   }
 
   function resetToUpload() {
