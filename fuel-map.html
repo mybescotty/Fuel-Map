@@ -527,9 +527,9 @@
   function initMap() {
     if (S.mapInstance) return;
     S.mapInstance = L.map('map', { preferCanvas: true });
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-      subdomains: 'abcd', maxZoom: 19
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 19
     }).addTo(S.mapInstance);
   }
 
@@ -667,11 +667,11 @@
       else sel.classList.remove('error');
     });
     if (hasEmpty) {
-      errEl.textContent = 'Please select a column for every highlighted field before generating.';
-      errEl.style.display = 'block';
+      if (errEl) { errEl.textContent = 'Please select a column for every highlighted field before generating.'; errEl.style.display = 'block'; }
+      else toast('Please map all required columns before generating.', 'warn');
       return;
     }
-    errEl.style.display = 'none';
+    if (errEl) errEl.style.display = 'none';
     const [di, hi, ti, tdi, qi] = vals.map(Number);
     S.lookbackDays = Math.max(7, parseInt(document.getElementById('input-lookback').value) || 90);
     const stockMap = buildStockMap(S.stockRows, di, hi);
