@@ -53,6 +53,8 @@
     .mapping-row label{display:block;font-size:.78rem;font-weight:600;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.05em;}
     .mapping-row select{width:100%;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:.86rem;}
     .mapping-row select:focus{outline:none;border-color:var(--accent);}
+    .mapping-row select.error{border-color:var(--red);}
+    #mapping-error{color:var(--red);font-size:.82rem;padding:8px 12px;background:#3f1212;border-radius:6px;margin-top:4px;display:none;}
     .mapping-footer{display:flex;align-items:center;gap:14px;margin-top:6px;}
     .lookback-row{display:flex;align-items:center;gap:8px;font-size:.86rem;color:var(--muted);}
     .lookback-row input{width:68px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:.86rem;text-align:center;}
@@ -171,6 +173,7 @@
           </div>
         </div>
       </div>
+      <div id="mapping-error"></div>
       <div class="mapping-footer">
         <div class="lookback-row">
           <label for="input-lookback">Lookback:</label>
@@ -189,6 +192,7 @@
     <div id="side-panel">
       <div class="panel-header">
         <h2>Fuel Depots</h2>
+        <div id="panel-diag" style="font-size:.72rem;color:var(--muted);margin-bottom:6px;"></div>
         <div class="panel-meta" id="panel-meta"></div>
         <button class="btn-secondary" id="btn-reupload">&#8592; Re-upload Files</button>
       </div>
@@ -550,8 +554,8 @@
     if (bounds.length > 0) {
       S.mapInstance.fitBounds(L.latLngBounds(bounds), { padding: [50, 50] });
     } else {
-      S.mapInstance.setView([-25.2744, 133.7751], 4);
-      toast('No depots matched DEPOT_LOCATIONS. Update the config at the top of the script.', 'warn');
+      S.mapInstance.setView([54.5, -2.5], 5);
+      toast('No depots matched DEPOT_LOCATIONS \u2014 check depot codes match your Excel data.', 'warn');
     }
     if (unmapped > 0) toast(unmapped + ' depot(s) not in DEPOT_LOCATIONS \u2014 shown in panel only.', 'warn');
   }
@@ -559,6 +563,9 @@
   function renderPanel(stats) {
     const list = document.getElementById('depot-list');
     list.innerHTML = '';
+    const matched = stats.filter(function(s){ return !!s.location; }).length;
+    const diagEl = document.getElementById('panel-diag');
+    if (diagEl) diagEl.textContent = 'Found ' + stats.length + ' depot(s) from stock \u2014 ' + matched + ' matched to map';
     const counts = { red:0, amber:0, green:0, grey:0 };
     stats.forEach(function(s){ counts[s.urgency]++; });
     const meta = document.getElementById('panel-meta');
@@ -626,11 +633,17 @@
       S.stockHeaders = sd.headers; S.stockRows = sd.rows;
       S.txnHeaders   = td.headers; S.txnRows   = td.rows;
 
-      fillDropdown('map-stock-depot',   S.stockHeaders, autoDetect(S.stockHeaders, ['depot','store','site','location','code']));
-      fillDropdown('map-stock-holding', S.stockHeaders, autoDetect(S.stockHeaders, ['holding','on hand','onhand','stock','balance','current','qty','quantity']));
-      fillDropdown('map-txn-date',      S.txnHeaders,   autoDetect(S.txnHeaders,   ['date','datetime','issued','created','transaction']));
-      fillDropdown('map-txn-depot',     S.txnHeaders,   autoDetect(S.txnHeaders,   ['depot','store','site','location','code']));
-      fillDropdown('map-txn-qty',       S.txnHeaders,   autoDetect(S.txnHeaders,   ['qty','quantity','issued','usage','amount','litres','liters','vol']));
+      fillDropdown('map-stock-depot',   S.stockHeaders, autoDetect(S.stockHeaders, ['depot','store','site','location','code','bin']));
+      fillDropdown('map-stock-holding', S.stockHeaders, autoDetect(S.stockHeaders, ['holding','on hand','onhand','qoh','available','stock','balance','current','qty','quantity']));
+      fillDropdown('map-txn-date',      S.txnHeaders,   autoDetect(S.txnHeaders,   ['date','datetime','issued','created','transaction','posted']));
+      fillDropdown('map-txn-depot',     S.txnHeaders,   autoDetect(S.txnHeaders,   ['depot','store','site','location','code','bin']));
+      fillDropdown('map-txn-qty',       S.txnHeaders,   autoDetect(S.txnHeaders,   ['qty','quantity','issued','issue','usage','amount','litres','liters','vol','dispatch']));
+
+      // Clear any previous error highlights when new files are loaded
+      ['map-stock-depot','map-stock-holding','map-txn-date','map-txn-depot','map-txn-qty'].forEach(function(id){
+        document.getElementById(id).classList.remove('error');
+      });
+      document.getElementById('mapping-error').style.display = 'none';
 
       renderPreview('preview-stock', S.stockHeaders, S.stockRows);
       renderPreview('preview-txn',   S.txnHeaders,   S.txnRows);
@@ -644,12 +657,22 @@
   }
 
   function generateMap() {
-    const di  = parseInt(document.getElementById('map-stock-depot').value);
-    const hi  = parseInt(document.getElementById('map-stock-holding').value);
-    const ti  = parseInt(document.getElementById('map-txn-date').value);
-    const tdi = parseInt(document.getElementById('map-txn-depot').value);
-    const qi  = parseInt(document.getElementById('map-txn-qty').value);
-    if ([di,hi,ti,tdi,qi].some(isNaN)) { toast('Please map all required columns before generating.', 'warn'); return; }
+    const ids = ['map-stock-depot','map-stock-holding','map-txn-date','map-txn-depot','map-txn-qty'];
+    const vals = ids.map(function(id){ return document.getElementById(id).value; });
+    const errEl = document.getElementById('mapping-error');
+    let hasEmpty = false;
+    ids.forEach(function(id, i) {
+      const sel = document.getElementById(id);
+      if (vals[i] === '') { sel.classList.add('error'); hasEmpty = true; }
+      else sel.classList.remove('error');
+    });
+    if (hasEmpty) {
+      errEl.textContent = 'Please select a column for every highlighted field before generating.';
+      errEl.style.display = 'block';
+      return;
+    }
+    errEl.style.display = 'none';
+    const [di, hi, ti, tdi, qi] = vals.map(Number);
     S.lookbackDays = Math.max(7, parseInt(document.getElementById('input-lookback').value) || 90);
     const stockMap = buildStockMap(S.stockRows, di, hi);
     const txnMap   = buildTxnMap(S.txnRows, ti, tdi, qi, S.lookbackDays);
@@ -695,6 +718,15 @@
         e.preventDefault();
         card.classList.remove('drag-over');
         handleFile(e.dataTransfer.files[0], slot);
+      });
+    });
+
+    // Clear error highlight when user manually picks a column
+    ['map-stock-depot','map-stock-holding','map-txn-date','map-txn-depot','map-txn-qty'].forEach(function(id){
+      document.getElementById(id).addEventListener('change', function(){
+        this.classList.remove('error');
+        if (!document.querySelector('.mapping-row select.error'))
+          document.getElementById('mapping-error').style.display = 'none';
       });
     });
 
